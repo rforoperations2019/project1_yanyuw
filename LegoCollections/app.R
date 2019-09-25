@@ -5,7 +5,7 @@
 # Find out more about building applications with Shiny here:
 #
 #    http://shiny.rstudio.com/
-#
+
 
 library(shiny)
 library(tm)
@@ -16,6 +16,8 @@ library(ggplot2)
 library(DT)
 library(dplyr)
 library(tools)
+library(plotly)
+library(shinythemes)
 LegoData <- read.csv('LEGO2019.csv', stringsAsFactors = FALSE)
 all_themes <- unique(LegoData$Theme)
 getTermMatrix <- memoise(function(sub_legodata) {
@@ -32,7 +34,8 @@ getTermMatrix <- memoise(function(sub_legodata) {
 })
 
 # Define UI for application that draws a histogram
-ui <- navbarPage('LEGO Roster',
+ui <- navbarPage(theme = 'sketchy.css',
+                 title = 'LEGO Roster',
                  tabPanel('Name Cluster',
                           titlePanel('Name Cluster for All Themes'),
                           sidebarLayout(
@@ -67,18 +70,17 @@ ui <- navbarPage('LEGO Roster',
                                                    label = 'Select interested year(s):',
                                                    choices = c('2018', '2019'),
                                                    selected = '2019'),
-                                selectInput(inputId = "bin_num",
+                                sliderInput(inputId = "bin_num",
                                             label = "Number of bins in histogram (approximate):",
-                                            choices = c(10, 20, 35, 50),
-                                            selected = 20),
+                                            min = 5, max = 50, value = 20),
                                 sliderInput(inputId = "n_samp", 
                                             label = "Number of Samples:",  
                                             min = 1, max = 500, value = 200, step = 50)
                                  ),
                              mainPanel(
                                 tabsetPanel(
-                                   tabPanel('Pieces',plotOutput('piece_histogram')), 
-                                   tabPanel('US Price', plotOutput('price_histogram'))
+                                   tabPanel('Pieces',plotlyOutput('piece_histogram')), 
+                                   tabPanel('US Price', plotlyOutput('price_histogram'))
                                    )
                                 )
                              )
@@ -95,10 +97,12 @@ ui <- navbarPage('LEGO Roster',
                                             min = 0, max = 5, 
                                             value = 2)
                              ),
-                          tabsetPanel(
-                             tabPanel('Scatter Plot', plotOutput('scatter')),
-                             tabPanel('Data Table', DT::dataTableOutput(outputId = "sample_table"))
+                             mainPanel(
+                             tabsetPanel(
+                                tabPanel('Scatter Plot', br(), plotlyOutput('scatter')),
+                                tabPanel('Data Table', DT::dataTableOutput(outputId = "sample_table"))
                               )
+                             )
                           )
                      )
 )
@@ -111,12 +115,6 @@ server <- function(input, output, session) {
       req(input$theme)
       filter(LegoData, (Year %in% as.numeric(input$year)) & (Theme == input$theme))
    })
-   # text <- reactive({
-   #    input$get_theme
-   #    isolate({
-   #          getTermMatrix(lego_sub_name(), input$theme)
-   #    })
-   # })
    wordcloud_rep <- repeatable(wordcloud)
    output$wcplot <- renderPlot({
       v <- getTermMatrix(lego_sub_name())
@@ -124,7 +122,6 @@ server <- function(input, output, session) {
                     min.freq = input$freq, max.words=input$word_max,
                     colors=brewer.pal(8, "Set3"))
    })
-   
    # nav2
    lego_sub_his <- reactive({
       req(input$year_his)
@@ -141,40 +138,39 @@ server <- function(input, output, session) {
       req(input$n_samp)
       sample_n(lego_sub_his(), input$n_samp) 
    })
-   
-   observe({
-      x <- input$bin_num
-      updateSelectInput(session, 
-                        inputId = "bin_num",
-                        choices = c(10, 20, 35, 50),
-                        selected = x)
+   output$price_histogram <- renderPlotly({
+      ggplotly(
+         ggplot(data = his_sample(), aes(x = USPrice), fill = 'darkgray') +
+            geom_histogram(bins = input$bin_num) + 
+            ggtitle('Price Histogram in US') + 
+            theme(plot.title = element_text(hjust = 0.5)) + 
+            xlab('Price in US'), 
+         tooltip = 'text')
    })
-   output$price_histogram <- renderPlot({
-      hist(his_sample$USPrice,
-           probability = TRUE,
-           breaks = input$bin_num,  #??????
-           xlab = "US Price",
-           main = "Lego Set US Price Histogram")
-   })
-   output$piece_histogram <- renderPlot({
-      hist(his_sample()$Pieces,
-           probability = TRUE,
-           breaks = input$bin_num,
-           xlab = "Pieces",
-           main = "Lego Set Pieces Histogram")
+   output$piece_histogram <- renderPlotly({
+      ggplotly(
+         ggplot(data = his_sample(), aes(x = Pieces), fill = 'darkgray') +
+            geom_histogram(bins = input$bin_num) + 
+            ggtitle('Pieces Histogram') + 
+            theme(plot.title = element_text(hjust = 0.5)) + 
+            xlab('Set Pieces'),  
+         tooltip = 'text')
    })
    # nav3
    ratio_sample <- reactive({
-      invalidateLater(millis = 8000)
+      invalidateLater(millis = 5000)
       req(input$n_samp_ratio)
       sample_n(LegoData, input$n_samp_ratio) 
    })
-   output$scatter <- renderPlot({ # Error in aes_string: object 'Theme' not found
-      ggplot(data = ratio_sample(), aes_string(x = Wantedby, y = Ownedby, color = Theme)) +   
+   output$scatter <- renderPlotly({
+      ggplotly(
+      ggplot(data = ratio_sample(), aes(x = WantedBy, y = OwnedBy, color = Theme)) +   
          geom_point(size = input$size) + 
          labs(x = 'Wanted by people (numbers)',
               y = 'Owned by people (numbers)',
-              title = "Possessing Ratio")
+              title = "Possessing Ratio"),
+      tooltip = c("x", "y")
+      )
    })
    output$sample_table <- DT::renderDataTable({
          DT::datatable(data = ratio_sample()[, 4:12], 
