@@ -17,7 +17,9 @@ library(DT)
 library(dplyr)
 library(tools)
 library(plotly)
-library(shinythemes)
+library(shinydashboard)
+
+# global data clean and processing for word cluster
 LegoData <- read.csv('LEGO2019.csv', stringsAsFactors = FALSE)
 all_themes <- unique(LegoData$Theme)
 getTermMatrix <- memoise(function(sub_legodata) {
@@ -33,83 +35,93 @@ getTermMatrix <- memoise(function(sub_legodata) {
    sort(rowSums(c), decreasing = TRUE)
 })
 
-# Define UI for application that draws a histogram
-ui <- navbarPage(theme = 'sketchy.css',
-                 title = 'LEGO Roster',
-                 tabPanel('Name Cluster',
-                          titlePanel('Name Cluster for All Themes'),
-                          sidebarLayout(
-                             sidebarPanel(
-                                checkboxGroupInput(inputId = 'year',
-                                                   label = 'Select interested year(s):',
-                                                   choices = c('2018', '2019'),
-                                                   selected = '2019'),
-                                selectInput(inputId = 'theme',
-                                            label = 'Select a set theme',
-                                            choices = all_themes),
-                                actionButton(inputId = 'get_theme',
-                                             label = 'Create Set Name Cluster'),
-                                hr(),
-                                sliderInput(inputId = "freq",
-                                            "Minimum Frequency:",
-                                            min = 1,  max = 20, value = 10),
-                                sliderInput(inputId = "word_max",
-                                            "Maximum Number of Words:",
-                                            min = 1,  max = 50,  value = 20)
-                             ),
-                             mainPanel(
-                                plotOutput("wcplot")
-                             )
-                          )
-                     ),
-                 tabPanel('Histogram',
-                          title = 'Histogram',
-                          sidebarLayout(
-                             sidebarPanel(
-                                checkboxGroupInput(inputId = 'year_his',
-                                                   label = 'Select interested year(s):',
-                                                   choices = c('2018', '2019'),
-                                                   selected = '2019'),
-                                sliderInput(inputId = "bin_num",
-                                            label = "Number of bins in histogram (approximate):",
-                                            min = 5, max = 50, value = 20),
-                                sliderInput(inputId = "n_samp", 
-                                            label = "Number of Samples:",  
-                                            min = 1, max = 500, value = 200, step = 50)
-                                 ),
-                             mainPanel(
-                                tabsetPanel(
-                                   tabPanel('Pieces',plotlyOutput('piece_histogram')), 
-                                   tabPanel('US Price', plotlyOutput('price_histogram'))
-                                   )
-                                )
-                             )
-                 ),
-                 tabPanel('Own/Want Ratio',
-                          title = 'Possessing Ratio',
-                          sidebarLayout(
-                             sidebarPanel(position = 'right',
-                                sliderInput(inputId = "n_samp_ratio", 
-                                            label = "Number of Samples:",  
-                                            min = 1, max = 1000, value = 500, step = 100),
-                                sliderInput(inputId = "size", 
-                                            label = "Point Size:", 
-                                            min = 0, max = 5, 
-                                            value = 2)
-                             ),
-                             mainPanel(
-                             tabsetPanel(
-                                tabPanel('Scatter Plot', br(), plotlyOutput('scatter')),
-                                tabPanel('Data Table', DT::dataTableOutput(outputId = "sample_table"))
-                              )
-                             )
-                          )
-                     )
+# dashboard layout
+header <- dashboardHeader(title = 'LEGO Roster')
+sidebar <- dashboardSidebar(
+   sidebarMenu(id = 'navbar',
+               menuItem('Name Cluster', tabName = 'cluster', icon = icon('book')),
+               menuItem('Histogram', tabName = 'histogram', icon = icon('chart-bar')),
+               menuItem('Possessing Ratio', tabName = 'ratio', icon = icon('percent'))
+               )
+            )
+body <- dashboardBody(
+   tabItems(
+      tabItem(
+         tabName = 'cluster',
+         fluidRow(
+            box(
+               checkboxGroupInput(inputId = 'year',
+                                  label = 'Select interested year(s):',
+                                  choices = c('2018', '2019'),
+                                  selected = '2019'),
+               selectInput(inputId = 'theme',
+                           label = 'Select a set theme',
+                           choices = all_themes),
+               hr(),
+               sliderInput(inputId = "freq",
+                           "Minimum Frequency:",
+                           min = 1,  max = 20, value = 10),
+               sliderInput(inputId = "word_max",
+                           "Maximum Number of Words:",
+                           min = 1,  max = 50,  value = 20)
+            ),
+            box(plotOutput("wcplot"))
+         )
+      ),
+      tabItem(
+         tabName = 'histogram',
+         fluidRow(
+            infoBoxOutput("piece_ave"),
+            valueBoxOutput("price_ave"),
+            valueBoxOutput('count')
+         ),
+         fluidRow(
+            box(
+               checkboxGroupInput(inputId = 'year_his',
+                                  label = 'Select interested year(s):',
+                                  choices = c('2018', '2019'),
+                                  selected = '2019'),
+               sliderInput(inputId = "bin_num",
+                           label = "Number of bins in histogram (approximate):",
+                           min = 5, max = 50, value = 20),
+               sliderInput(inputId = "n_samp", 
+                           label = "Number of Samples:",  
+                           min = 1, max = 500, value = 200, step = 50)
+            )
+         ),
+         fluidRow(
+            tabBox(title = 'Histograms',
+                   tabPanel('Pieces',plotlyOutput('piece_histogram')), 
+                   tabPanel('US Price', plotlyOutput('price_histogram'))
+                   )
+         )
+         
+      ),
+      tabItem(
+         tabName = 'ratio',
+         box(
+            sliderInput(inputId = "n_samp_ratio", 
+                        label = "Number of Samples:",  
+                        min = 1, max = 1000, value = 500, step = 100),
+            sliderInput(inputId = "size", 
+                        label = "Point Size:", 
+                        min = 0, max = 5, 
+                        value = 2)
+         ),
+         hr(),
+         tabBox(title = 'Ratio plots and table',
+                tabPanel('Scatter Plot', br(), plotlyOutput('scatter')),
+                tabPanel('Data Table', DT::dataTableOutput(outputId = "sample_table"))
+            
+         )
+      )
+   )
 )
 
-# Define server logic required to draw a histogram
+ui <- dashboardPage(skin = 'black', header, sidebar, body)
+
 server <- function(input, output, session) {
-   # nav1
+   # tab1
    lego_sub_name <- reactive({
       req(input$year)
       req(input$theme)
@@ -122,7 +134,7 @@ server <- function(input, output, session) {
                     min.freq = input$freq, max.words=input$word_max,
                     colors=brewer.pal(8, "Set3"))
    })
-   # nav2
+   # tab2
    lego_sub_his <- reactive({
       req(input$year_his)
       filter(LegoData, Year %in% as.numeric(input$year))
@@ -138,6 +150,20 @@ server <- function(input, output, session) {
       req(input$n_samp)
       sample_n(lego_sub_his(), input$n_samp) 
    })
+   # numeric boxes
+   output$piece_ave <- renderInfoBox({
+      num <- round(mean(his_sample()$Pieces, na.rm = T), 2)
+      infoBox("Avg Pieces", value = num, subtitle = paste(nrow(his_sample()), "characters"), icon = icon("puzzle-piece"), color = "blue")
+   })
+   output$price_ave <- renderValueBox({
+      num <- round(mean(his_sample()$USPrice, na.rm = T), 2)
+      valueBox(subtitle = "Avg Price", value = num, icon = icon("dollar-sign"), color = "green")
+   })
+   output$count <- renderValueBox({
+      num <- nrow(his_sample())
+      valueBox(subtitle = "Sample counts", value = num, icon = icon("sort-numeric-asc"), color = "yellow")
+   })
+   # histogram plots
    output$price_histogram <- renderPlotly({
       ggplotly(
          ggplot(data = his_sample(), aes(x = USPrice), fill = 'darkgray') +
@@ -156,7 +182,7 @@ server <- function(input, output, session) {
             xlab('Set Pieces'),  
          tooltip = 'text')
    })
-   # nav3
+   # tab3
    ratio_sample <- reactive({
       invalidateLater(millis = 5000)
       req(input$n_samp_ratio)
