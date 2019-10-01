@@ -5,8 +5,8 @@ account: yanyuw
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 1240564
-bundleId: 2442766
+bundleId: 2448977
 url: https://yanyuw.shinyapps.io/LegoCollections/
-when: 1569384847.035
+when: 1569563702.87939
 asMultiple: FALSE
 asStatic: FALSE
